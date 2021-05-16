@@ -1,4 +1,3 @@
-
 # Import Splinter, BeautifulSoup, and Pandas
 from splinter import Browser
 from bs4 import BeautifulSoup as soup
@@ -8,9 +7,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 
 def scrape_all():
+
+    browser = Browser("chrome", executable_path="chromedriver", headless=True)
     # Initiate headless driver for deployment
-    executable_path = {'executable_path': ChromeDriverManager().install()}
-    browser = Browser('chrome', **executable_path, headless=True)
+    #executable_path = {'executable_path': ChromeDriverManager().install()}
+    #browser = Browser('chrome', **executable_path, headless=True)
 
     news_title, news_paragraph = mars_news(browser)
 
@@ -20,6 +21,7 @@ def scrape_all():
         "news_paragraph": news_paragraph,
         "featured_image": featured_image(browser),
         "facts": mars_facts(),
+        "hemispheres":hemisphere(browser),
         "last_modified": dt.datetime.now()
     }
 
@@ -27,16 +29,15 @@ def scrape_all():
     browser.quit()
     return data
 
-
 def mars_news(browser):
 
-    # Scrape Mars News
+
     # Visit the mars nasa news site
-    url = 'https://data-class-mars.s3.amazonaws.com/Mars/index.html'
+    url = 'https://mars.nasa.gov/news/'
     browser.visit(url)
 
     # Optional delay for loading the page
-    browser.is_element_present_by_css('div.list_text', wait_time=1)
+    browser.is_element_present_by_css("ul.item_list li.slide", wait_time=1)
 
     # Convert the browser html to a soup object and then quit the browser
     html = browser.html
@@ -44,28 +45,30 @@ def mars_news(browser):
 
     # Add try/except for error handling
     try:
-        slide_elem = news_soup.select_one('div.list_text')
+        slide_elem = news_soup.select_one("ul.item_list li.slide")
         # Use the parent element to find the first 'a' tag and save it as 'news_title'
-        news_title = slide_elem.find('div', class_='content_title').get_text()
+        news_title = slide_elem.find("div", class_="content_title").get_text()
         # Use the parent element to find the paragraph text
-        news_p = slide_elem.find('div', class_='article_teaser_body').get_text()
+        news_p = slide_elem.find("div", class_="article_teaser_body").get_text()
 
     except AttributeError:
         return None, None
 
     return news_title, news_p
 
+## > SCRAPE FEATURED IMAGES <
 
 def featured_image(browser):
-    # Visit URL
+
+    # Visit URL 
     url = 'https://data-class-jpl-space.s3.amazonaws.com/JPL_Space/index.html'
     browser.visit(url)
 
-    # Find and click the full image button
-    full_image_elem = browser.find_by_tag('button')[1]
+    # Find and click the full_image button
+    full_image_elem= browser.find_by_tag('button')[1]
     full_image_elem.click()
 
-    # Parse the resulting html with soup
+   # Parse the resulting html with soup
     html = browser.html
     img_soup = soup(html, 'html.parser')
 
@@ -82,24 +85,55 @@ def featured_image(browser):
 
     return img_url
 
+## > SCRAPE FACTS ABOUT MARS <
+
 def mars_facts():
     # Add try/except for error handling
     try:
         # Use 'read_html' to scrape the facts table into a dataframe
-        df = pd.read_html('https://data-class-mars-facts.s3.amazonaws.com/Mars_Facts/index.html')[0]
+        df = pd.read_html('http://space-facts.com/mars/')[0]
 
     except BaseException:
         return None
 
     # Assign columns and set index of dataframe
-    df.columns=['Description', 'Mars', 'Earth']
+    df.columns=['Description', 'Mars']
     df.set_index('Description', inplace=True)
 
     # Convert dataframe into HTML format, add bootstrap
-    return df.to_html(classes="table table-striped")
+    return df.to_html(classes="table table-striped text-primary")
 
-if __name__ == "__main__":
 
-    # If running as script, print scraped data
+
+def hemisphere(browser):
+    url='https://astrogeology.usgs.gov/search/results?q=hemisphere+enhanced&k1=target&v1=Mars'
+    browser.visit(url)
+
+
+    hemisphere_image_urls = []
+
+    imgs_links= browser.find_by_css("a.product-item h3")
+
+    for x in range(len(imgs_links)):
+        hemisphere={}
+
+        # Find elements going to click link 
+        browser.find_by_css("a.product-item h3")[x].click()
+
+        # Find sample Image link
+        sample_img= browser.find_link_by_text("Sample").first
+        hemisphere['img_url']=sample_img['href']
+
+        # Get hemisphere Title
+        hemisphere['title']=browser.find_by_css("h2.title").text
+
+        #Add Objects to hemisphere_img_urls list
+        hemisphere_image_urls.append(hemisphere)
+
+        # Go Back
+        browser.back()
+    return hemisphere_image_urls
+
+if __name__== "__main__":
+    
     print(scrape_all())
-
